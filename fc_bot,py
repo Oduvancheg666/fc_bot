@@ -1,0 +1,413 @@
+import requests
+import json
+import telebot
+BOT_TOKEN="TOKEN"
+bot = telebot.TeleBot(BOT_TOKEN)
+from telebot import TeleBot
+from telebot import types
+import re
+from datetime import datetime
+from dateutil import tz
+
+
+payload={}
+headers = {
+'X-Auth-Token': 'TOKEN'
+}
+
+start_menu_keyboard = types.InlineKeyboardMarkup()
+button_championats_lc = types.InlineKeyboardButton('Лига чемпионов', callback_data='LC')
+start_menu_keyboard.add(button_championats_lc)
+button_championats_table_pl = types.InlineKeyboardButton('Английская премьер лига', callback_data='PL')
+start_menu_keyboard.add(button_championats_table_pl)
+button_championats_table_pd = types.InlineKeyboardButton('Испания. Примера', callback_data='PD')
+start_menu_keyboard.add(button_championats_table_pd)   
+button_championats_table_bl = types.InlineKeyboardButton('Германия. Бундеслига', callback_data='BL1')
+start_menu_keyboard.add(button_championats_table_bl)
+button_championats_table_sa = types.InlineKeyboardButton('Италия. Серия А', callback_data='SA')
+start_menu_keyboard.add(button_championats_table_sa)
+button_championats_table_fl = types.InlineKeyboardButton('Франция. Лига 1', callback_data='FL1')
+start_menu_keyboard.add(button_championats_table_fl)
+button_championats_table_ded = types.InlineKeyboardButton('Нидерланды. Эредивизи', callback_data='DED')
+start_menu_keyboard.add(button_championats_table_ded)
+button_championats_table_ppl = types.InlineKeyboardButton('Португалия. Примера', callback_data='PPL')
+start_menu_keyboard.add(button_championats_table_ppl)  
+
+
+@bot.message_handler(commands=['start'])
+def start(message):
+    bot.send_chat_action(message.chat.id, 'typing')
+    bot.send_message(message.chat.id, text="Выберете Турнир", reply_markup=start_menu_keyboard)
+    print(message.text)
+
+@bot.callback_query_handler(func=lambda call: True)
+def handle_query(call):
+    def get_table():
+        menu_keyboard = types.InlineKeyboardMarkup()
+        main_menu_button = types.InlineKeyboardButton('На главную', callback_data='main_menu')
+        button_back = types.InlineKeyboardButton('Назад', callback_data=callback)
+        menu_keyboard.add(button_back, main_menu_button) 
+        response = requests.request("GET", url, headers=headers, data=payload)
+        f = response.json()
+        i = 0
+        res = []
+        res.append(('{:2s} {:15s}{:6s} {:6s}'.format(" №", "Team", "Games", "Points")))
+        while i <= teams:
+            position = f['standings'][0]['table'][i]['position']
+            team = f['standings'][0]['table'][i]['team']['shortName']
+            playedGames = f['standings'][0]['table'][i]['playedGames']
+            points = f['standings'][0]['table'][i]['points']
+            res.append(('{:2d} {:17s}{:2d} {:6d}'.format(position, team, playedGames, points)))
+            r = "\n".join(map(str, res))
+            i+=1
+        cleanString = re.sub('[^A-Za-z0-9 № \n:]+',' ', r )
+        add_markd = "```"
+        table = add_markd + "\n" + cleanString + "\n" + add_markd   
+        bot.send_message(call.message.chat.id, text=f"{table}", reply_markup=menu_keyboard, parse_mode='MARKDOWN')
+    
+    def get_top_score():
+        menu_keyboard = types.InlineKeyboardMarkup()
+        main_menu_button = types.InlineKeyboardButton('На главную', callback_data='main_menu')
+        button_back = types.InlineKeyboardButton('Назад', callback_data=callback)
+        menu_keyboard.add(button_back, main_menu_button) 
+        response = requests.request("GET", url, headers=headers, data=payload)
+        f = response.json()
+        i = 0
+        res = []
+        while i <= 9:
+            player = f['scorers'][i]['player']['name']
+            goals = f['scorers'][i]['goals']
+            res.append(('{:25s} {:5d}'.format(player, goals)))
+            r = "\n".join(map(str, res))
+            i+=1
+        add_markd = "```"
+        table = add_markd + "\n" + r + "\n" + add_markd
+        bot.send_message(call.message.chat.id, text=f"{table}", reply_markup=menu_keyboard, parse_mode='MARKDOWN')
+        
+    def get_lc_matches():
+        menu_keyboard = types.InlineKeyboardMarkup()
+        main_menu_button = types.InlineKeyboardButton('На главную', callback_data='main_menu')
+        button_back = types.InlineKeyboardButton('Назад', callback_data='LC')
+        menu_keyboard.add(button_back, main_menu_button) 
+        response = requests.request("GET", url, headers=headers, data=payload)
+        f = response.json()
+        check_items = len(f['matches'])
+        if check_items == 0:
+            bot.send_message(call.message.chat.id, text=text_placeholder, reply_markup=menu_keyboard, parse_mode='MARKDOWN')
+        else:
+            i = 0
+            res = []
+            while i <= check_items - 1:
+                homeTeam = f['matches'][i]['homeTeam']['shortName']
+                awayTeam = f['matches'][i]['awayTeam']['shortName']
+                scorehomeTeam = f['matches'][i]['score']['fullTime']['home']
+                scoreawayTeam = f['matches'][i]['score']['fullTime']['away']
+                utcDate = f['matches'][i]['utcDate']
+                utc_tz = tz.gettz('UTC')
+                msk_tz = tz.gettz('Europe/Moscow')
+                utc = datetime.strptime(utcDate, '%Y-%m-%dT%H:%M:%SZ')
+                month_letters = utc.strftime ('%Y-%b-%d %H:%M:%S')
+                month_letters = str(month_letters)
+                month_letters = month_letters[:-9]
+                utctz = utc.replace(tzinfo=utc_tz)
+                set_msk_tz = utctz.astimezone(msk_tz)
+                set_msk_tz = str(set_msk_tz)
+                cleanStringTime = set_msk_tz[+11:-9]
+                res.append(('{!s:^2s}'.format(month_letters + ". " + cleanStringTime)))
+                r = "\n".join(map(str, res))
+                res.append(('{!s:^1s}'.format('')))
+                if scorehomeTeam == None or scoreawayTeam == None:
+                    scorehomeTeam = ''
+                    scoreawayTeam = ''
+                res.append(('{:<1s}{!s:>2s}{:1s}{!s:<2s}{:<1s}'.format(homeTeam, scorehomeTeam, " : ", scoreawayTeam, awayTeam)))
+                r = "\n".join(map(str, res))
+                res.append(('{!s:^1s}'.format('____________________________')))
+                res.append(('{!s:^1s}'.format('')))
+                r = "\n".join(map(str, res))
+                i+=1
+            cleanString = re.sub('[^A-Za-z0-9 № \n :-_]+',' ', r )
+            add_markd = "```"
+            table = add_markd + "\n" + cleanString + "\n" + add_markd 
+            bot.send_message(call.message.chat.id, text=f"{table}", reply_markup=menu_keyboard, parse_mode='MARKDOWN')
+
+    def get_calendar():
+        menu_keyboard = types.InlineKeyboardMarkup()
+        main_menu_button = types.InlineKeyboardButton('На главную', callback_data='main_menu')
+        button_back = types.InlineKeyboardButton('Назад', callback_data=league)
+        menu_keyboard.add(button_back, main_menu_button) 
+        url_current_matchday = "https://api.football-data.org/v4/competitions/{}/matches".format(league)
+        get_current_matchday = requests.request("GET", url_current_matchday, headers=headers, data=payload)
+        current_matchday_response = get_current_matchday.json()
+        current_matchday = current_matchday_response['matches'][0]['season']['currentMatchday']
+        url = "https://api.football-data.org/v4/competitions/{}/matches?matchday={}".format(league, current_matchday)
+        response = requests.request("GET", url, headers=headers, data=payload)
+        f = response.json()
+        i = 0
+        res = []
+        while i <= games:
+            homeTeam = f['matches'][i]['homeTeam']['shortName']
+            awayTeam = f['matches'][i]['awayTeam']['shortName']
+            scorehomeTeam = f['matches'][i]['score']['fullTime']['home']
+            scoreawayTeam = f['matches'][i]['score']['fullTime']['away']
+            utcDate = f['matches'][i]['utcDate']
+            utc_tz = tz.gettz('UTC')
+            msk_tz = tz.gettz('Europe/Moscow')
+            utc = datetime.strptime(utcDate, '%Y-%m-%dT%H:%M:%SZ')
+            month_letters = utc.strftime ('%Y-%b-%d %H:%M:%S')
+            month_letters = str(month_letters)
+            month_letters = month_letters[:-9]
+            utctz = utc.replace(tzinfo=utc_tz)
+            set_msk_tz = utctz.astimezone(msk_tz)
+            set_msk_tz = str(set_msk_tz)
+            cleanStringTime = set_msk_tz[+11:-9]
+            res.append(('{!s:^2s}'.format(month_letters + " " + cleanStringTime)))
+            r = "\n".join(map(str, res))
+            res.append(('{!s:^1s}'.format('')))
+            if scorehomeTeam == None or scoreawayTeam == None:
+                scorehomeTeam = ''
+                scoreawayTeam = ''
+            res.append(('{:<1s}{!s:>2s}{:1s}{!s:<2s}{:<1s}'.format(homeTeam, scorehomeTeam, " : ", scoreawayTeam, awayTeam)))
+            r = "\n".join(map(str, res))
+            res.append(('{!s:^1s}'.format('____________________________')))
+            res.append(('{!s:^1s}'.format('')))
+            r = "\n".join(map(str, res))
+            i+=1
+        cleanString = re.sub('[^A-Za-z0-9 № \n :-_]+',' ', r )
+        add_markd = "```"
+        add_current_matchday = "Тур " + str(current_matchday)
+        table = add_markd + "\n" + add_current_matchday + "\n" + '' + "\n" + cleanString + "\n" + add_markd   
+        bot.send_message(call.message.chat.id, text=f"{table}", reply_markup=menu_keyboard, parse_mode='MARKDOWN') 
+      
+            
+    main_menu_button = types.InlineKeyboardButton('На главную', callback_data='main_menu')
+    
+    if call.data=='LC':
+        lc_keyboard = types.InlineKeyboardMarkup()
+        lc_top16_btn = types.InlineKeyboardButton('1/8 финала', callback_data='TOP16')
+        lc_top8_btn = types.InlineKeyboardButton('1/4 финала', callback_data='TOP8')
+        lc_keyboard.add(lc_top16_btn, lc_top8_btn)
+        lc_top4_btn = types.InlineKeyboardButton('Полуфинал', callback_data='TOP4')
+        lc_keyboard.add(lc_top4_btn)
+        lc_top2_btn = types.InlineKeyboardButton('Финал', callback_data='TOP2')
+        lc_keyboard.add(lc_top2_btn)
+        lc_keyboard.add(main_menu_button) 
+        bot.send_message(call.message.chat.id, text="Лига чемпионов ⚽", reply_markup=lc_keyboard)
+        
+    if call.data=='PL':
+        apl_keyboard = types.InlineKeyboardMarkup()
+        apl_table_btn = types.InlineKeyboardButton('Турнирная таблица', callback_data='tableapl')
+        apl_keyboard.add(apl_table_btn)
+        apl_topscore_btn = types.InlineKeyboardButton('Лучшие бомбардиры', callback_data='topscoreapl')
+        apl_keyboard.add(apl_topscore_btn) 
+        apl_calendar_btn = types.InlineKeyboardButton('Ближайший тур', callback_data='calendarapl')
+        apl_keyboard.add(apl_calendar_btn) 
+        apl_keyboard.add(main_menu_button) 
+        bot.send_message(call.message.chat.id, text="АПЛ 🏴󠁧󠁢󠁥󠁮󠁧󠁿", reply_markup=apl_keyboard)
+        
+    if call.data=='PD':
+        pd_keyboard = types.InlineKeyboardMarkup()
+        pd_table_btn = types.InlineKeyboardButton('Турнирная таблица', callback_data='tablepd')
+        pd_keyboard.add(pd_table_btn)
+        pd_topscore_btn = types.InlineKeyboardButton('Лучшие бомбардиры', callback_data='topscorepd')
+        pd_keyboard.add(pd_topscore_btn) 
+        pd_calendar_btn = types.InlineKeyboardButton('Ближайший тур', callback_data='calendarpd')
+        pd_keyboard.add(pd_calendar_btn)
+        pd_keyboard.add(main_menu_button) 
+        bot.send_message(call.message.chat.id, text="Испания. Примера 🇪🇸", reply_markup=pd_keyboard)
+
+    if call.data=='BL1':
+        bl_keyboard = types.InlineKeyboardMarkup()
+        bl_table_btn = types.InlineKeyboardButton('Турнирная таблица', callback_data='tablebl')
+        bl_keyboard.add(bl_table_btn)
+        bl_topscore_btn = types.InlineKeyboardButton('Лучшие бомбардиры', callback_data='topscorebl')
+        bl_keyboard.add(bl_topscore_btn) 
+        bl_calendar_btn = types.InlineKeyboardButton('Ближайший тур', callback_data='calendarbl')
+        bl_keyboard.add(bl_calendar_btn)
+        bl_keyboard.add(main_menu_button) 
+        bot.send_message(call.message.chat.id, text="Германия. Бундеслига 🇩🇪", reply_markup=bl_keyboard)
+        
+    if call.data=='SA':
+        sa_keyboard = types.InlineKeyboardMarkup()
+        sa_table_btn = types.InlineKeyboardButton('Турнирная таблица', callback_data='tablesa')
+        sa_keyboard.add(sa_table_btn)
+        sa_topscore_btn = types.InlineKeyboardButton('Лучшие бомбардиры', callback_data='topscoresa')
+        sa_keyboard.add(sa_topscore_btn) 
+        sa_calendar_btn = types.InlineKeyboardButton('Ближайший тур', callback_data='calendarsa')
+        sa_keyboard.add(sa_calendar_btn)
+        sa_keyboard.add(main_menu_button) 
+        bot.send_message(call.message.chat.id, text="Италия. Серия А 🇮🇹", reply_markup=sa_keyboard)
+        
+    if call.data=='FL1':
+        fl_keyboard = types.InlineKeyboardMarkup()
+        fl_table_btn = types.InlineKeyboardButton('Турнирная таблица', callback_data='tablefl')
+        fl_keyboard.add(fl_table_btn)
+        fl_topscore_btn = types.InlineKeyboardButton('Лучшие бомбардиры', callback_data='topscorefl')
+        fl_keyboard.add(fl_topscore_btn) 
+        fl_calendar_btn = types.InlineKeyboardButton('Ближайший тур', callback_data='calendarfl')
+        fl_keyboard.add(fl_calendar_btn)
+        fl_keyboard.add(main_menu_button) 
+        bot.send_message(call.message.chat.id, text="Франиця. Лига 1 🇫🇷", reply_markup=fl_keyboard)
+
+    if call.data=='DED':
+        ded_keyboard = types.InlineKeyboardMarkup()
+        ded_table_btn = types.InlineKeyboardButton('Турнирная таблица', callback_data='tableded')
+        ded_keyboard.add(ded_table_btn)
+        ded_topscore_btn = types.InlineKeyboardButton('Лучшие бомбардиры', callback_data='topscoreded')
+        ded_keyboard.add(ded_topscore_btn) 
+        ded_calendar_btn = types.InlineKeyboardButton('Ближайший тур', callback_data='calendarded')
+        ded_keyboard.add(ded_calendar_btn)
+        ded_keyboard.add(main_menu_button) 
+        bot.send_message(call.message.chat.id, text="Нидерланды. Эредивизи 🇳🇱", reply_markup=ded_keyboard)
+
+    if call.data=='PPL':
+        ppl_keyboard = types.InlineKeyboardMarkup()
+        ppl_table_btn = types.InlineKeyboardButton('Турнирная таблица', callback_data='tableppl')
+        ppl_keyboard.add(ppl_table_btn)
+        ppl_topscore_btn = types.InlineKeyboardButton('Лучшие бомбардиры', callback_data='topscoreppl')
+        ppl_keyboard.add(ppl_topscore_btn) 
+        ppl_calendar_btn = types.InlineKeyboardButton('Ближайший тур', callback_data='calendarppl')
+        ppl_keyboard.add(ppl_calendar_btn)
+        ppl_keyboard.add(main_menu_button) 
+        bot.send_message(call.message.chat.id, text="Португалия. Примера 🇵🇹", reply_markup=ppl_keyboard)
+
+    if call.data=='tablesa':  
+        callback = "SA"
+        url = "https://api.football-data.org/v4/competitions/SA/standings"
+        teams = 19
+        get_table()
+        
+    if call.data=='tableded':
+        callback = "DED"
+        url = "https://api.football-data.org/v4/competitions/DED/standings"
+        teams = 17
+        get_table()
+    
+    if call.data=='tableapl':
+        callback = "PL"
+        url = "https://api.football-data.org/v4/competitions/PL/standings"
+        teams = 19
+        get_table()
+
+        
+    if call.data=='tablefl':
+        callback = "FL1"
+        url = "https://api.football-data.org/v4/competitions/FL1/standings"
+        teams = 19
+        get_table()
+
+
+    if call.data=='tablebl':
+        callback = "BL1"
+        url = "https://api.football-data.org/v4/competitions/BL1/standings"
+        teams = 17
+        get_table()
+
+    if call.data=='tableppl':
+        callback = "PPL"
+        url = "https://api.football-data.org/v4/competitions/PPL/standings"
+        teams = 17
+        get_table()
+        
+    if call.data=='tablepd':
+        callback = "PD"
+        url = "https://api.football-data.org/v4/competitions/PD/standings"
+        teams = 19
+        get_table()
+
+        
+    if call.data=='topscoresa':      
+        callback = "SA"
+        url = "https://api.football-data.org/v4/competitions/SA/scorers"
+        get_top_score()
+
+    if call.data=='topscoreapl':     
+        callback = "PL"
+        url = "https://api.football-data.org/v4/competitions/PL/scorers"
+        get_top_score()
+        
+    if call.data=='topscorepd':       
+        callback = "PD"
+        url = "https://api.football-data.org/v4/competitions/PD/scorers"
+        get_top_score()
+
+    if call.data=='topscorebl':   
+        callback = "BL1"
+        url = "https://api.football-data.org/v4/competitions/BL1/scorers"
+        get_top_score()
+        
+    if call.data=='topscorefl':     
+        callback = "FL1"
+        url = "https://api.football-data.org/v4/competitions/FL1/scorers"
+        get_top_score()
+
+    if call.data=='topscoreded':     
+        callback = "DED"
+        url = "https://api.football-data.org/v4/competitions/DED/scorers"
+        get_top_score()
+
+    if call.data=='topscoreppl': 
+        callback = "PPL"
+        url = "https://api.football-data.org/v4/competitions/PPL/scorers"
+        get_top_score()
+
+
+    if call.data=='TOP16': 
+        url = "https://api.football-data.org/v4/competitions/CL/matches?stage=LAST_16"
+        get_lc_matches()
+        
+    if call.data=='TOP8': 
+        url = "https://api.football-data.org/v4/competitions/CL/matches?stage=LAST_8"
+        text_placeholder = "_Участники пока неизвестны. Матчи пройдут 11-12 и 18-19 апреля_"
+        get_lc_matches()
+            
+    if call.data=='TOP4': 
+ 
+        url = "https://api.football-data.org/v4/competitions/CL/matches?stage=LAST_4"
+        text_placeholder = "_Участники пока неизвестны. Матчи пройдут 9-10 и 16-17 мая_"
+        get_lc_matches()
+
+    if call.data=='TOP2':    
+        url = "https://api.football-data.org/v4/competitions/CL/matches?stage=LAST_2"
+        text_placeholder = "_Участники пока неизвестны. Решающий матч Лиги чемпионов-2022/23 пройдет 10 июня 2023 года на Олимпийском стадионе Ататюрка в Стамбуле, где в 2005 году Ливерпуль одержал знаменитую волевую победу над Миланом_"
+   
+    if call.data=='calendarapl': 
+        league = "PL"
+        games = 9
+        get_calendar()
+        
+    if call.data=='calendarpd': 
+        league = "PD"
+        games = 9
+        get_calendar()
+        
+    if call.data=='calendarbl': 
+        league = "BL1"
+        games = 8
+        get_calendar()
+        
+    if call.data=='calendarsa': 
+        league = "SA"
+        games = 9
+        get_calendar()
+
+    if call.data=='calendarfl': 
+        league = "FL1"
+        games = 9
+        get_calendar()
+
+    if call.data=='calendarded': 
+        league = "DED"
+        games = 8
+        get_calendar()
+        
+    if call.data=='calendarppl': 
+        league = "PPL"
+        games = 8
+        get_calendar() 
+
+
+    if call.data=='main_menu':
+        bot.send_message(call.message.chat.id, text="Выберете Турнир", reply_markup=start_menu_keyboard)
+   
+    
+bot.infinity_polling()
